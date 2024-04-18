@@ -1,0 +1,182 @@
+Análise de clusteres - desmatamento por Unidade Federativa do Brasil entre 2000 e 2022
+Mariana Peres Nascimento - RA 204344
+
+```{r}
+library(tidyverse)
+library(magrittr)
+library(cluster)
+library(GGally)
+library(geobr)
+```
+
+## LIMPEZA E MANIPULAÇÃO
+
+```{r}
+dados <- read_csv("C:/Users/maris/Downloads/municipio_bioma.csv.gz",
+                  col_types = "dccddddd")
+any(is.na(dados))
+
+dados %<>% mutate(uf = NA)
+
+for (i in 1:nrow(dados)){
+  if (str_detect(dados$id_municipio[i], pattern = "^12")){
+    dados$uf[i] <- "AC"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^27")){
+    dados$uf[i] <- "AL"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^16")){
+    dados$uf[i] <- "AP"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^13")){
+    dados$uf[i] <- "AM"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^29")){
+    dados$uf[i] <- "BA"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^23")){
+    dados$uf[i] <- "CE"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^53")){
+    dados$uf[i] <- "DF"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^32")){
+    dados$uf[i] <- "ES"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^52")){
+    dados$uf[i] <- "GO"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^21")){
+    dados$uf[i] <- "MA"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^51")){
+    dados$uf[i] <- "MT"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^50")){
+    dados$uf[i] <- "MS"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^31")){
+    dados$uf[i] <- "MG"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^15")){
+    dados$uf[i] <- "PA"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^25")){
+    dados$uf[i] <- "PB"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^41")){
+    dados$uf[i] <- "PR"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^26")){
+    dados$uf[i] <- "PE"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^22")){
+    dados$uf[i] <- "PI"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^33")){
+    dados$uf[i] <- "RJ"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^24")){
+    dados$uf[i] <- "RN"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^43")){
+    dados$uf[i] <- "RS"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^11")){
+    dados$uf[i] <- "RO"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^14")){
+    dados$uf[i] <- "RR"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^42")){
+    dados$uf[i] <- "SC"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^35")){
+    dados$uf[i] <- "SP"
+  }
+  else if (str_detect(dados$id_municipio[i], pattern = "^28")){
+    dados$uf[i] <- "SE"
+  }
+  else{
+    dados$uf[i] <- "TO"
+  }
+}
+
+dados_estado <- dados %>% group_by(uf) %>% mutate(area_total = sum(area_total),
+                                        desmatado = sum(desmatado),
+                                        vegetacao_natural = sum(vegetacao_natural),
+                                        nao_vegetacao_natural = sum(nao_vegetacao_natural),
+                                        hidrografia = sum(hidrografia)) %>% 
+  select(-c(ano, id_municipio, bioma)) %>% unique()
+
+uf <- dados_estado$uf
+dados_estado %<>% ungroup() %>% select(-uf)
+rownames(dados_estado) <- uf
+```
+
+
+## CLUSTER
+
+```{r}
+## GRÁFICO PAIRS
+dados_estado %>% ggpairs() + theme_bw()
+
+## ANÁLISE DE COMPONENTES PRINCIPAIS
+acp <- summary(princomp(scale(dados_estado)), loadings = T)
+
+dados_acp <- data.frame(comp1 = 0.520*dados_estado$area_total+
+    0.209*dados_estado$desmatado+
+    0.514*dados_estado$vegetacao_natural+
+    0.419*dados_estado$nao_vegetacao_natural+
+    0.496*dados_estado$hidrografia,
+    comp2 = 0.141*dados_estado$area_total-
+    0.926*dados_estado$desmatado+
+    0.105*dados_estado$vegetacao_natural-
+    0.264*dados_estado$nao_vegetacao_natural-
+    0.207*dados_estado$hidrografia,
+    row.names = uf)
+
+
+## ELBOW PLOT
+e_k_acp <- sapply(1:15, function(k){kmeans(dados_acp, k, nstart=50,
+                                 iter.max = 15)$betweenss/(kmeans(dados_acp, k, nstart=50,
+                                 iter.max = 15)$betweenss+kmeans(dados_acp, k, nstart=50,
+                                 iter.max = 15)$tot.withinss)})
+data.frame(k = 1:15, e_k_acp = e_k_acp) %>% ggplot(aes(x = k, y = e_k_acp)) +
+  geom_point() + 
+  labs(x = "K", y = "E(K)") +
+  theme_bw()
+
+
+## MODELOS
+pam2_acp <- pam(dados_acp, k = 2)
+pam3_acp <- pam(dados_acp, k = 3)
+
+
+brasil_acp <- read_country(year = 2020)
+
+tabela_pam2_acp <- rownames_to_column(data.frame(pam2 = as.factor(pam2_acp$clustering)))
+tabela_pam3_acp <- rownames_to_column(data.frame(pam3 = as.factor(pam3_acp$clustering)))
+
+brasil_acp <- left_join(brasil_acp, left_join(tabela_pam2_acp, tabela_pam3_acp, by = "rowname"), by = c("abbrev_state" = "rowname"))
+
+brasil_acp %>% ggplot() + 
+  geom_sf(aes(fill = pam2)) + 
+  geom_sf_text(aes(label = abbrev_state), size = 2) +
+  labs(fill = "Cluster", title = "A", x = "", y = "")+
+  theme_bw()
+
+brasil_acp %>% ggplot() + 
+  geom_sf(aes(fill = pam3)) + 
+  geom_sf_text(aes(label = abbrev_state), size = 2) +
+  labs(fill = "Cluster", title = "B", x = "", y = "")+
+  theme_bw()
+
+plot(silhouette(pam2_acp), main = "A")
+plot(silhouette(pam3_acp), main = "B")
+
+which(rownames(dados_acp) %in% c("AM", "MT", "PA"))
+dados_acp[c(14, 20, 25),] %>% summarise(mean(comp1), mean(comp2))
+dados_acp[-c(14, 20, 25),] %>% summarise(mean(comp1), mean(comp2))
+```
+
